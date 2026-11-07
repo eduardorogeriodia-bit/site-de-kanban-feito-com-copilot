@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f4f6f8">
+  <title>Quadro Kanban</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="script.js" defer></script>
+</head>
+<body>
+  <main class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="#" aria-label="Quadro Kanban, início">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span>fluxo<span class="brand-dot">.</span></span>
+      </a>
+      <div class="board-tools" aria-label="Gerenciar quadros">
+        <label class="visually-hidden" for="board-select">Quadro atual</label>
+        <select id="board-select" class="board-select"></select>
+        <button id="rename-board" class="icon-button" type="button" aria-label="Renomear quadro" title="Renomear quadro">✎</button>
+        <button id="delete-board" class="icon-button danger-hover" type="button" aria-label="Excluir quadro" title="Excluir quadro">×</button>
+        <span class="toolbar-divider" aria-hidden="true"></span>
+        <button id="add-board" class="button button-primary" type="button"><span aria-hidden="true">＋</span> Novo quadro</button>
+      </div>
+    </header>
+
+    <section class="board-heading" aria-labelledby="page-title">
+      <div>
+        <p class="eyebrow">ESPAÇO DE TRABALHO</p>
+        <h1 id="page-title">Meu quadro</h1>
+        <p class="board-subtitle">Organize suas ideias, uma tarefa de cada vez.</p>
+      </div>
+      <div class="board-summary" aria-label="Resumo do quadro">
+        <span class="summary-dot" aria-hidden="true"></span>
+        <span id="total-count">0 atividades</span>
+      </div>
+    </section>
+
+    <section id="kanban-board" class="kanban-board" aria-label="Colunas do quadro"></section>
+
+    <footer class="app-footer">
+      <span>Feito para manter o foco.</span>
+      <span class="save-status" id="save-status" role="status" aria-live="polite">Alterações salvas</span>
+    </footer>
+  </main>
+
+  <dialog id="task-dialog" class="dialog">
+    <form id="task-form" class="dialog-form">
+      <div class="dialog-heading">
+        <div>
+          <p class="eyebrow">ATIVIDADE</p>
+          <h2 id="task-dialog-title">Nova atividade</h2>
+        </div>
+        <button class="icon-button dialog-close" type="button" data-close="task-dialog" aria-label="Fechar">×</button>
+      </div>
+      <label class="field-label" for="task-title">Título</label>
+      <input id="task-title" name="title" type="text" maxlength="100" placeholder="Ex.: Preparar apresentação" required>
+      <label class="field-label" for="task-description">Descrição <span class="optional">(opcional)</span></label>
+      <textarea id="task-description" name="description" rows="4" maxlength="500" placeholder="Adicione mais detalhes..."></textarea>
+      <label class="field-label" for="task-priority">Prioridade</label>
+      <select id="task-priority" name="priority">
+        <option value="low">Baixa</option>
+        <option value="medium" selected>Média</option>
+        <option value="high">Alta</option>
+      </select>
+      <div class="dialog-actions">
+        <button class="button button-quiet" type="button" data-close="task-dialog">Cancelar</button>
+        <button class="button button-primary" type="submit">Salvar atividade</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="board-dialog" class="dialog dialog-compact">
+    <form id="board-form" class="dialog-form">
+      <div class="dialog-heading">
+        <div>
+          <p class="eyebrow">QUADRO</p>
+          <h2 id="board-dialog-title">Novo quadro</h2>
+        </div>
+        <button class="icon-button dialog-close" type="button" data-close="board-dialog" aria-label="Fechar">×</button>
+      </div>
+      <label class="field-label" for="board-name">Nome do quadro</label>
+      <input id="board-name" name="name" type="text" maxlength="60" placeholder="Ex.: Projeto novo" required>
+      <div class="dialog-actions">
+        <button class="button button-quiet" type="button" data-close="board-dialog">Cancelar</button>
+        <button class="button button-primary" type="submit">Salvar quadro</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="confirm-dialog" class="dialog dialog-compact">
+    <form id="confirm-form" class="dialog-form">
+      <div class="dialog-heading">
+        <div>
+          <p class="eyebrow">CONFIRMAÇÃO</p>
+          <h2 id="confirm-title">Excluir atividade?</h2>
+        </div>
+        <button class="icon-button dialog-close" type="button" data-close="confirm-dialog" aria-label="Fechar">×</button>
+      </div>
+      <p id="confirm-message" class="confirm-message"></p>
+      <div class="dialog-actions">
+        <button class="button button-quiet" type="button" data-close="confirm-dialog">Cancelar</button>
+        <button class="button button-danger" type="submit">Excluir</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
