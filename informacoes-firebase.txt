@@ -1,0 +1,62 @@
+Meu quadro Kanban - informacoes de configuracao
+
+Hospedagem publicada:
+https://quadro-kanban-fluxo.web.app/
+
+Arquivos locais:
+- public\index.html: interface do aplicativo
+- public\script.js: autenticacao e quadro Kanban
+- public\firebase.js: inicializacao do SDK Firebase
+- public\firebase-config.js: configuracao publica do app Web
+- public\style.css: estilos
+- apps-script\Code.gs: envio de convites por Gmail, sem Cloud Functions
+- firebase.json: configuracao do Firebase Hosting
+- .firebaserc: projeto Firebase associado
+- firestore.rules: modelo de regra de acesso para este app
+- firestore.indexes.json: indices de consultas do Firestore
+
+Configuracao necessaria no Firebase Console:
+1. Em Authentication > Sign-in method, habilite E-mail/senha.
+2. Em Authentication > Settings > Authorized domains, mantenha localhost e adicione quadro-kanban-fluxo.web.app.
+3. Em Authentication > Templates, configure o modelo de redefinicao de senha e confira o dominio usado nos links.
+4. Crie ou confirme o Firestore Database.
+5. Publique as regras atualizadas do arquivo firestore.rules. Elas incluem quadros compartilhados.
+
+Para enviar e-mails de convite sem ativar o plano Blaze:
+1. Abra https://script.google.com/ com a conta Gmail que enviara as mensagens e crie um projeto.
+2. Copie apps-script\Code.gs para o editor e substitua o manifesto do projeto pelo conteudo de apps-script\appsscript.json.
+3. Em Configuracoes do projeto > Propriedades do script, adicione:
+   - FIREBASE_WEB_API_KEY: o valor apiKey de public\firebase-config.js.
+   Se essa chave tiver restricao por dominio HTTP, crie uma chave separada no Google Cloud Console, restrita a Identity Toolkit API, e use-a aqui sem restricao por dominio. Essa chave identifica o projeto, nao e uma senha nem concede acesso aos dados do Firestore.
+4. Selecione a funcao authorizeScript no editor e execute-a uma vez para conceder as permissoes solicitadas para Gmail e conexoes externas.
+5. Implante > Nova implantacao > Aplicativo da Web. Configure "Executar como" para sua conta e "Quem pode acessar" como "Qualquer pessoa". Copie a URL terminada em /exec.
+6. Cole essa URL em window.inviteEmailEndpoint no arquivo public\firebase-config.js, mantendo-a entre aspas.
+7. Publique somente o Hosting:
+   firebase deploy --only hosting --project quadro-kanban-fluxo
+
+O Apps Script verifica o token Firebase, confirma no Firestore que o usuario autenticado e o dono do convite e so entao envia o e-mail pelo Gmail da conta que publicou o script. O convidado ainda precisa entrar no site com o e-mail convidado e aceitar o convite. O site confirma o resultado do envio pelo estado salvo no Firestore e permite reenviar convites pendentes.
+Contas Gmail pessoais estao sujeitas a cotas diarias do Google Apps Script (historicamente 100 destinatarios por dia; a cota pode mudar). Nao ha garantia de entrega, e nenhum plano pago do Firebase e necessario.
+
+Ao alterar apps-script\Code.gs ou apps-script\appsscript.json, atualize a implantacao do Web App no Google Apps Script para a nova versao. A URL /exec permanece a mesma quando uma implantacao existente e atualizada.
+
+Para publicar o site, as regras e os indices:
+firebase deploy --only hosting,firestore:rules,firestore:indexes --project quadro-kanban-fluxo
+
+Compartilhamento:
+- O dono convida pelo e-mail da conta Fluxo e escolhe leitor ou editor.
+- O convite aparece no site e um e-mail e enviado ao endereco convidado. A pessoa deve entrar com aquele mesmo e-mail e aceitar no site antes de receber acesso.
+- Se a pessoa ja tiver acesso, remova esse acesso antes de enviar um novo convite que exija aceitacao.
+- Convites pendentes criados antes da configuracao do Apps Script nao enviam e-mail retroativamente; use "Reenviar e-mail" na janela Compartilhar.
+- Leitores podem visualizar e comentar, mas nao alteram atividades ou configuracoes do quadro. Editores podem editar.
+- O dono pode remover acessos e cancelar convites na janela Compartilhar.
+- Quadros compartilhados sao documentos independentes em kanbans/{boardId}; colaboradores nao recebem acesso aos outros quadros privados do dono.
+- Quadros antigos continuam privados no caminho users/{uid}/kanban/state. Ao compartilhar, o quadro e copiado para seu documento independente.
+
+Seguranca:
+- A configuracao do SDK Web, inclusive apiKey, identifica o projeto e fica no navegador; nao a trate como senha.
+- Restrinja a chave de API no Google Cloud Console aos servicos e domínios necessarios.
+- Nunca coloque senhas de usuarios, chaves privadas ou credenciais de conta de servico nos arquivos do site.
+- O site nao fornece contas ou senhas de demonstracao. Cada pessoa deve usar sua propria conta.
+- Nao publique este bloco de notas. O Firebase Hosting serve apenas a pasta public.
+- Dados da versao antiga salvos sem UID no navegador nao sao importados automaticamente, para evitar atribui-los a conta errada.
+- O cache local e separado por UID. Se houver alteracoes locais pendentes diferentes dos dados remotos, o site permite aplicar a versao local ao Firebase ou descartar as pendencias e manter a versao remota.
