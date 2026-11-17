@@ -195,7 +195,54 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   padding: 48px 0 30px;
   gap: 20px;
 }
-
+.board-heading-actions { display: flex; align-items: center; gap: 18px; }
+.board-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 330px);
+  gap: 18px;
+  align-items: start;
+}
+.project-ai-chat {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: 0 4px 16px rgb(26 49 55 / 4%);
+}
+.project-ai-heading h2 { margin: 0 0 6px; font-size: 16px; }
+.project-ai-heading p:last-child { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.ai-chat-messages {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  max-height: 390px;
+  min-height: 110px;
+  overflow: auto;
+  padding: 10px;
+  border-radius: 10px;
+  background: var(--surface-soft);
+}
+.ai-chat-empty { margin: auto 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.ai-chat-message {
+  max-width: 94%;
+  margin: 0;
+  padding: 9px 11px;
+  border-radius: 10px;
+  background: var(--surface);
+  font-size: 12px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.ai-chat-message.user { align-self: flex-end; background: var(--accent-soft); }
+.ai-chat-message.ai-chat-error { color: var(--error); }
+.ai-chat-form { display: grid; gap: 8px; }
+.ai-chat-form textarea { min-height: 74px; resize: vertical; font-size: 12px; }
+.ai-chat-form .button { justify-self: end; }
+.ai-chat-status { min-height: 15px; margin: 0; color: var(--muted); font-size: 11px; }
 .route-page { padding: 46px 0 56px; }
 .page-hero { max-width: 680px; padding: 20px 0 30px; }
 .page-hero h1 { margin-bottom: 12px; }
@@ -646,6 +693,7 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
     gap: 12px;
     padding-top: 28px;
   }
+  .board-workspace { grid-template-columns: minmax(0, 1fr) 300px; gap: 12px; }
   .kanban-board { grid-template-columns: 1fr; gap: 12px; }
   .app-footer {
     display: grid;
@@ -686,6 +734,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
 }
 
 @media (max-width: 800px) {
+  .board-workspace { grid-template-columns: 1fr; }
+  .project-ai-chat { grid-row: 2; }
   .kanban-column { padding: 13px; }
   .task-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
@@ -719,6 +769,8 @@ input::placeholder, textarea::placeholder { color: var(--muted); opacity: 1; }
   .task-detail-grid { grid-template-columns: 1fr; gap: 24px; }
   .kanban-board { grid-template-columns: 1fr; }
   .board-heading { align-items: start; padding: 31px 0 20px; }
+  .board-heading-actions { width: 100%; justify-content: space-between; gap: 10px; }
+  .board-heading-actions .button { padding: 0 10px; font-size: 11px; }
   h1 { font-size: 26px; }
   .board-subtitle { max-width: 220px; font-size: 12px; }
   .board-summary { white-space: nowrap; font-size: 10px; }

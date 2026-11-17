@@ -280,9 +280,12 @@
             <h1 id="page-title">Meu quadro</h1>
             <p class="board-subtitle">Organize suas ideias, uma tarefa de cada vez.</p>
           </div>
-          <div class="board-summary" aria-label="Resumo do quadro">
-            <span class="summary-dot" aria-hidden="true"></span>
-            <span id="total-count">0 atividades</span>
+          <div class="board-heading-actions">
+            <button id="generate-batch" class="button button-quiet" type="button">Gerar 5 cards com IA</button>
+            <div class="board-summary" aria-label="Resumo do quadro">
+              <span class="summary-dot" aria-hidden="true"></span>
+              <span id="total-count">0 atividades</span>
+            </div>
           </div>
         </section>
 
@@ -293,7 +296,23 @@
           <button id="create-sprint" class="button button-quiet" type="button">Nova sprint</button>
         </section>
 
-        <section id="kanban-board" class="kanban-board" aria-label="Colunas do quadro"></section>
+        <div class="board-workspace">
+          <section id="kanban-board" class="kanban-board" aria-label="Colunas do quadro"></section>
+          <aside id="project-ai-chat" class="project-ai-chat" aria-labelledby="project-ai-title">
+            <div class="project-ai-heading">
+              <p class="eyebrow">ASSISTENTE DO PROJETO</p>
+              <h2 id="project-ai-title">Pergunte ao seu projeto</h2>
+              <p>Respostas baseadas nos cards reais deste quadro.</p>
+            </div>
+            <div id="ai-chat-messages" class="ai-chat-messages" role="log" aria-live="polite" aria-relevant="additions"></div>
+            <form id="ai-chat-form" class="ai-chat-form">
+              <label class="visually-hidden" for="ai-chat-input">Pergunta sobre o projeto</label>
+              <textarea id="ai-chat-input" name="question" rows="3" maxlength="1000" placeholder="O que está travado? O que falta lançar? Quem tem mais tarefas?" required></textarea>
+              <p id="ai-chat-status" class="ai-chat-status" role="status" aria-live="polite"></p>
+              <button id="ai-chat-submit" class="button button-primary" type="submit">Perguntar</button>
+            </form>
+          </aside>
+        </div>
 
         <details class="board-history">
           <summary>Histórico de atividades</summary>
@@ -399,6 +418,26 @@
       <div class="dialog-actions">
         <button class="button button-quiet" type="button" data-close="task-dialog">Cancelar</button>
         <button class="button button-primary" type="submit">Salvar atividade</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="ai-batch-dialog" class="dialog dialog-compact">
+    <form id="ai-batch-form" class="dialog-form">
+      <div class="dialog-heading">
+        <div>
+          <p class="eyebrow">GERADOR EM LOTE</p>
+          <h2>Planeje este projeto</h2>
+        </div>
+        <button class="icon-button dialog-close" type="button" data-close="ai-batch-dialog" aria-label="Fechar">×</button>
+      </div>
+      <label class="field-label" for="ai-batch-description">Descreva o projeto e o objetivo</label>
+      <textarea id="ai-batch-description" name="description" rows="5" maxlength="1500" placeholder="Ex.: Um aplicativo para conectar moradores a prestadores de serviços locais..." required></textarea>
+      <p class="confirm-message">A IA vai considerar o nome e os cards existentes no quadro para criar cinco atividades iniciais na primeira coluna.</p>
+      <p id="ai-batch-error" class="form-message error" role="alert" aria-live="polite"></p>
+      <div class="dialog-actions">
+        <button class="button button-quiet" type="button" data-close="ai-batch-dialog">Cancelar</button>
+        <button class="button button-primary" type="submit">Criar 5 cards</button>
       </div>
     </form>
   </dialog>

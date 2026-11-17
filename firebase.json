@@ -3,9 +3,20 @@
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
+  "functions": {
+    "source": "functions",
+    "runtime": "nodejs22"
+  },
   "hosting": {
     "public": "public",
     "rewrites": [
+      {
+        "source": "/api/ai/**",
+        "function": {
+          "functionId": "aiApi",
+          "region": "us-central1"
+        }
+      },
       {
         "source": "/home",
         "destination": "/index.html"

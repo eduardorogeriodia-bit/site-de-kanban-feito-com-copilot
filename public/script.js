@@ -117,6 +117,17 @@ const elements = {
   boardTitle: document.querySelector('#page-title'),
   board: document.querySelector('#kanban-board'),
   totalCount: document.querySelector('#total-count'),
+  generateBatchButton: document.querySelector('#generate-batch'),
+  projectAiChat: document.querySelector('#project-ai-chat'),
+  aiChatMessages: document.querySelector('#ai-chat-messages'),
+  aiChatForm: document.querySelector('#ai-chat-form'),
+  aiChatInput: document.querySelector('#ai-chat-input'),
+  aiChatSubmit: document.querySelector('#ai-chat-submit'),
+  aiChatStatus: document.querySelector('#ai-chat-status'),
+  aiBatchDialog: document.querySelector('#ai-batch-dialog'),
+  aiBatchForm: document.querySelector('#ai-batch-form'),
+  aiBatchDescription: document.querySelector('#ai-batch-description'),
+  aiBatchError: document.querySelector('#ai-batch-error'),
   saveStatus: document.querySelector('#save-status'),
   taskDialog: document.querySelector('#task-dialog'),
   taskForm: document.querySelector('#task-form'),
@@ -155,6 +166,7 @@ let activeTaskBoardId = null;
 let editingColumns = [];
 let historySubscription = null;
 let subscribedHistoryKey = null;
+const aiChatHistory = new Map();
 
 function criarId() {
   return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -762,6 +774,7 @@ function renderizar() {
   elements.boardTitle.textContent = board.name;
   elements.board.replaceChildren();
   atualizarSeletorDeQuadros();
+  elements.generateBatchButton.classList.toggle('hidden', !podeEditarQuadro(board));
   elements.shareButton.classList.toggle('hidden', papelDoQuadro(board) !== 'owner');
   elements.manageColumnsButton.classList.toggle('hidden', !podeEditarQuadro(board));
   elements.createSprintButton.disabled = !podeEditarQuadro(board);
@@ -781,8 +794,136 @@ function renderizar() {
     elements.board.append(criarColuna(column, columnIndex, tasks));
   });
   elements.totalCount.textContent = `${total} ${total === 1 ? 'atividade' : 'atividades'}`;
+  renderizarHistoricoDoChat(board);
   ensureBoardSubscription(board);
   ensureHistorySubscription(board);
+}
+
+function renderizarHistoricoDoChat(board, temporaryError = '') {
+  const history = aiChatHistory.get(board.id) ?? [];
+  elements.aiChatMessages.replaceChildren();
+  if (!history.length) {
+    elements.aiChatMessages.append(criarElemento(
+      'p',
+      'ai-chat-empty',
+      'Pergunte sobre atividades, responsáveis, prazos ou o andamento do quadro.',
+    ));
+  }
+  history.forEach((message) => {
+    elements.aiChatMessages.append(criarElemento(
+      'p',
+      `ai-chat-message ${message.role}`,
+      message.text,
+    ));
+  });
+  if (temporaryError) {
+    elements.aiChatMessages.append(criarElemento('p', 'ai-chat-message assistant ai-chat-error', temporaryError));
+  }
+  elements.aiChatMessages.scrollTop = elements.aiChatMessages.scrollHeight;
+}
+
+async function requisitarAssistente(path, payload) {
+  const user = obterAuth()?.currentUser;
+  if (!user) throw new Error('Entre novamente para usar o assistente.');
+  const token = await user.getIdToken();
+  const response = await fetch(path, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  });
+  let result = {};
+  try {
+    result = await response.json();
+  } catch (error) {
+    console.error('O backend de IA retornou uma resposta inválida:', error);
+  }
+  if (!response.ok) {
+    throw new Error(result.error || 'Não foi possível concluir a solicitação de IA.');
+  }
+  return result;
+}
+
+async function perguntarAoProjeto(event) {
+  event.preventDefault();
+  const board = obterQuadroAtual();
+  const question = elements.aiChatInput.value.trim();
+  if (!board || !question) return;
+
+  const history = aiChatHistory.get(board.id) ?? [];
+  const previousMessages = history.slice(-6).map((message) => ({
+    role: message.role === 'assistant' ? 'model' : 'user',
+    text: message.text,
+  }));
+  history.push({ role: 'user', text: question });
+  aiChatHistory.set(board.id, history);
+  renderizarHistoricoDoChat(board);
+  elements.aiChatInput.value = '';
+  elements.aiChatInput.disabled = true;
+  elements.aiChatSubmit.disabled = true;
+  elements.aiChatStatus.textContent = 'Consultando os cards do quadro...';
+
+  try {
+    const result = await requisitarAssistente('/api/ai/chat', {
+      boardId: board.id,
+      question,
+      history: previousMessages,
+    });
+    if (typeof result.answer !== 'string' || !result.answer.trim()) {
+      throw new Error('O assistente não retornou uma resposta. Tente reformular a pergunta.');
+    }
+    history.push({ role: 'assistant', text: result.answer.trim() });
+    if (obterQuadroAtual()?.id === board.id) renderizarHistoricoDoChat(board);
+  } catch (error) {
+    console.error('Não foi possível consultar o assistente do projeto:', error);
+    history.pop();
+    if (obterQuadroAtual()?.id === board.id) {
+      renderizarHistoricoDoChat(board, error.message || 'Não foi possível consultar o assistente agora.');
+    }
+  } finally {
+    elements.aiChatInput.disabled = false;
+    elements.aiChatSubmit.disabled = false;
+    elements.aiChatStatus.textContent = '';
+    elements.aiChatInput.focus();
+  }
+}
+
+async function gerarCardsEmLote(event) {
+  event.preventDefault();
+  const board = obterQuadroAtual();
+  const description = elements.aiBatchDescription.value.trim();
+  if (!board || !description || !podeEditarQuadro(board)) return;
+
+  const button = elements.aiBatchForm.querySelector('[type="submit"]');
+  button.disabled = true;
+  button.textContent = 'Gerando...';
+  elements.aiBatchError.textContent = '';
+  try {
+    const result = await requisitarAssistente('/api/ai/generate-batch', {
+      boardId: board.id,
+      description,
+    });
+    if (!Array.isArray(result.cards) || result.cards.length !== 5) {
+      throw new Error('O servidor não retornou exatamente cinco cards.');
+    }
+    const currentBoard = state.boards.find((item) => item.id === board.id);
+    if (!currentBoard) throw new Error('O quadro mudou antes de os cards serem exibidos. Reabra-o para conferir as alterações.');
+    const existingIds = new Set(currentBoard.tasks.map((task) => task.id));
+    currentBoard.tasks.push(...result.cards.filter((card) => !existingIds.has(card.id)));
+    atualizarCacheDoUsuario(authenticatedUser.uid, state, false);
+    elements.aiBatchDialog.close();
+    elements.aiBatchForm.reset();
+    renderizar();
+    mostrarAviso('Cinco cards foram criados para este projeto.');
+  } catch (error) {
+    console.error('Não foi possível gerar cards para o projeto:', error);
+    elements.aiBatchError.textContent = error.message || 'Não foi possível gerar os cards. Tente novamente.';
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Criar 5 cards';
+  }
 }
 
 function atualizarNavegacaoAtiva(route) {
@@ -2391,5 +2532,14 @@ elements.taskPageEdit.addEventListener('click', () => {
   if (found) abrirFormularioDeAtividade(found.task.column, found.task);
 });
 elements.commentForm.addEventListener('submit', (event) => void adicionarComentario(event));
+elements.aiChatForm.addEventListener('submit', (event) => void perguntarAoProjeto(event));
+elements.generateBatchButton.addEventListener('click', () => {
+  if (!podeEditarQuadro()) return;
+  elements.aiBatchForm.reset();
+  elements.aiBatchError.textContent = '';
+  elements.aiBatchDialog.showModal();
+  elements.aiBatchDescription.focus();
+});
+elements.aiBatchForm.addEventListener('submit', (event) => void gerarCardsEmLote(event));
 
 inicializarAutenticacao();
