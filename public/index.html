@@ -6,13 +6,13 @@
   <meta name="theme-color" content="#f4f6f8">
   <meta name="description" content="Organize tarefas e acompanhe o progresso do seu trabalho em um quadro Kanban.">
   <title>Meu quadro Kanban</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="/style.css">
   <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
-  <script src="firebase-config.js"></script>
-  <script src="firebase.js"></script>
-  <script src="script.js" defer></script>
+  <script src="/firebase-config.js"></script>
+  <script src="/firebase.js"></script>
+  <script src="/script.js" defer></script>
 </head>
 <body>
   <section id="loading-view" class="loading-view" aria-label="Carregando aplicativo">
@@ -129,15 +129,25 @@
         <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
         <span>fluxo<span class="brand-dot">.</span></span>
       </a>
-      <div class="board-tools" aria-label="Gerenciar quadros">
-        <label class="visually-hidden" for="board-select">Quadro atual</label>
-        <select id="board-select" class="board-select"></select>
-        <button id="rename-board" class="icon-button" type="button" aria-label="Renomear quadro" title="Renomear quadro">✎</button>
-        <button id="delete-board" class="icon-button danger-hover" type="button" aria-label="Excluir quadro" title="Excluir quadro">×</button>
-        <button id="manage-columns" class="button button-quiet" type="button">Colunas / WIP</button>
-        <button id="share-board" class="button button-quiet" type="button">Compartilhar</button>
-        <span class="toolbar-divider" aria-hidden="true"></span>
-        <button id="add-board" class="button button-primary" type="button"><span aria-hidden="true">+</span> Novo quadro</button>
+      <div class="header-actions">
+        <nav class="app-nav" aria-label="Navegação principal">
+          <a href="/home" data-route-link="home">Início</a>
+          <a href="/quadros" data-route-link="boards">Meus quadros</a>
+          <a href="/colegas" data-route-link="colleagues">Colegas</a>
+          <a href="/perfil" data-route-link="profile">Meu perfil</a>
+        </nav>
+        <div id="board-tools" class="board-tools" role="group" aria-label="Gerenciar quadro">
+          <label class="visually-hidden" for="board-select">Quadro atual</label>
+          <select id="board-select" class="board-select"></select>
+          <button id="rename-board" class="icon-button" type="button" aria-label="Renomear quadro" title="Renomear quadro">✎</button>
+          <button id="delete-board" class="icon-button danger-hover" type="button" aria-label="Excluir quadro" title="Excluir quadro">×</button>
+          <button id="manage-columns" class="button button-quiet" type="button">Colunas / WIP</button>
+          <button id="share-board" class="button button-quiet" type="button">Compartilhar</button>
+          <span class="toolbar-divider" aria-hidden="true"></span>
+          <button id="add-board" class="button button-primary" type="button"><span aria-hidden="true">+</span> Novo quadro</button>
+        </div>
+      </div>
+      <div class="toolbar-account">
         <button id="logout-button" class="button button-quiet" type="button">Sair</button>
       </div>
     </header>
@@ -150,41 +160,157 @@
       <div id="invitations-list" class="invitations-list"></div>
     </section>
 
-    <section class="board-heading" aria-labelledby="page-title">
-      <div>
-        <p class="eyebrow">ESPAÇO DE TRABALHO</p>
-        <h1 id="page-title">Meu quadro</h1>
-        <p class="board-subtitle">Organize suas ideias, uma tarefa de cada vez.</p>
+    <section id="home-page" class="route-page hidden" aria-labelledby="home-title">
+      <div class="page-hero">
+        <p class="eyebrow">SEU ESPAÇO DE TRABALHO</p>
+        <h1 id="home-title">Bem-vindo(a), <span id="home-user-name">ao Fluxo</span></h1>
+        <p>Organize seu trabalho e acompanhe seus projetos em um só lugar.</p>
       </div>
-      <div class="board-summary" aria-label="Resumo do quadro">
-        <span class="summary-dot" aria-hidden="true"></span>
-        <span id="total-count">0 atividades</span>
+      <div class="dashboard-grid">
+        <a class="dashboard-card" href="/quadros">
+          <span class="dashboard-card-icon" aria-hidden="true">▦</span>
+          <span class="dashboard-card-title">Meus quadros</span>
+          <span id="home-board-count" class="dashboard-card-description">Organize seus projetos</span>
+        </a>
+        <a class="dashboard-card" href="/perfil">
+          <span class="dashboard-card-icon" aria-hidden="true">◉</span>
+          <span class="dashboard-card-title">Meu perfil</span>
+          <span class="dashboard-card-description">Edite seu nome e biografia</span>
+        </a>
       </div>
     </section>
 
-    <section class="sprint-toolbar" aria-label="Backlog e sprints">
-      <label for="sprint-filter">Backlog / Sprint</label>
-      <select id="sprint-filter"></select>
-      <span id="backlog-summary" class="confirm-message"></span>
-      <button id="create-sprint" class="button button-quiet" type="button">Nova sprint</button>
+    <section id="boards-page" class="route-page hidden" aria-labelledby="boards-title">
+      <div class="route-heading">
+        <div>
+          <p class="eyebrow">ESPAÇO DE TRABALHO</p>
+          <h1 id="boards-title">Meus quadros</h1>
+          <p class="board-subtitle">Acesse seus projetos ou os quadros compartilhados com você.</p>
+        </div>
+        <button id="boards-add-board" class="button button-primary" type="button">+ Novo quadro</button>
+      </div>
+      <div id="boards-list" class="boards-list"></div>
+      <p id="boards-empty-state" class="empty-state hidden">Você ainda não tem quadros.</p>
     </section>
 
-    <section id="kanban-board" class="kanban-board" aria-label="Colunas do quadro"></section>
+    <section id="colleagues-page" class="route-page hidden" aria-labelledby="colleagues-title">
+      <div class="route-heading">
+        <div>
+          <p class="eyebrow">CONEXÕES</p>
+          <h1 id="colleagues-title">Colegas</h1>
+          <p class="board-subtitle">Acesse um link de perfil para enviar ou aceitar uma solicitação. Não há diretório público.</p>
+        </div>
+      </div>
+      <p id="colleagues-error" class="form-message error" role="alert" aria-live="polite"></p>
+      <section class="colleague-group" aria-labelledby="incoming-requests-title">
+        <h2 id="incoming-requests-title">Solicitações recebidas</h2>
+        <div id="incoming-friend-requests" class="colleague-list"></div>
+        <p id="incoming-requests-empty" class="empty-state">Nenhuma solicitação recebida.</p>
+      </section>
+      <section class="colleague-group" aria-labelledby="friends-title">
+        <h2 id="friends-title">Meus colegas</h2>
+        <div id="friends-list" class="colleague-list"></div>
+        <p id="friends-empty" class="empty-state">Você ainda não adicionou colegas.</p>
+      </section>
+      <section class="colleague-group" aria-labelledby="outgoing-requests-title">
+        <h2 id="outgoing-requests-title">Solicitações enviadas</h2>
+        <div id="outgoing-friend-requests" class="colleague-list"></div>
+        <p id="outgoing-requests-empty" class="empty-state">Nenhuma solicitação pendente.</p>
+      </section>
+    </section>
 
-    <details class="board-history">
-      <summary>Histórico de atividades</summary>
-      <div id="board-history-list" class="board-history-list"></div>
-    </details>
+    <section id="profile-page" class="route-page hidden" aria-labelledby="profile-title">
+      <div class="route-heading">
+        <div>
+          <p class="eyebrow">SUA CONTA</p>
+          <h1 id="profile-title">Meu perfil</h1>
+          <p class="board-subtitle">Compartilhe um pouco sobre você com quem acessar seu link.</p>
+        </div>
+      </div>
+      <section id="profile-view" class="profile-view hidden" aria-label="Perfil salvo">
+        <article class="public-profile-card">
+          <p class="eyebrow">MEU PERFIL</p>
+          <h2 id="profile-view-name"></h2>
+          <p id="profile-view-bio" class="public-profile-bio"></p>
+          <button id="profile-edit" class="button button-quiet" type="button">Editar perfil</button>
+        </article>
+      </section>
+      <div class="profile-layout">
+        <form id="profile-form" class="profile-form hidden">
+          <label class="field-label" for="profile-display-name">Nome de exibição</label>
+          <input id="profile-display-name" name="displayName" type="text" maxlength="80" autocomplete="name" required>
+          <label class="field-label" for="profile-bio">Biografia curta</label>
+          <textarea id="profile-bio" name="bio" rows="5" maxlength="280" placeholder="Conte um pouco sobre você..."></textarea>
+          <p id="profile-error" class="form-message error" role="alert" aria-live="polite"></p>
+          <div class="profile-form-actions">
+            <button id="profile-cancel" class="button button-quiet" type="button">Cancelar</button>
+            <button id="profile-save" class="button button-primary" type="submit">Salvar perfil</button>
+          </div>
+        </form>
+        <aside class="profile-link-card">
+          <h2>Link do perfil</h2>
+          <p>Seu perfil não aparece em uma lista pública. Compartilhe este link diretamente com outras pessoas.</p>
+          <input id="profile-public-url" type="text" readonly aria-label="Link direto do perfil">
+          <button id="copy-profile-link" class="button button-quiet" type="button">Copiar link</button>
+        </aside>
+      </div>
+    </section>
 
-    <footer class="app-footer">
-      <span>Feito para manter o foco.</span>
-      <span class="save-status" id="save-status" role="status" aria-live="polite">Alterações sincronizadas</span>
-    </footer>
+    <section id="public-profile-page" class="route-page hidden" aria-labelledby="public-profile-name">
+      <article id="public-profile-card" class="public-profile-card hidden">
+        <p class="eyebrow">PERFIL</p>
+        <h1 id="public-profile-name"></h1>
+        <p id="public-profile-bio" class="public-profile-bio"></p>
+        <div id="public-profile-actions" class="public-profile-actions"></div>
+      </article>
+      <p id="public-profile-message" class="form-message" role="status" aria-live="polite"></p>
+      <a class="button button-quiet route-back-link" href="/quadros">Voltar aos meus quadros</a>
+    </section>
+
+    <section id="board-page" class="hidden" aria-label="Quadro Kanban">
+      <div id="board-not-found" class="route-page hidden">
+        <h1>Quadro não encontrado</h1>
+        <p class="board-subtitle">Este quadro não existe ou você não tem acesso.</p>
+        <a class="button button-quiet route-back-link" href="/quadros">Voltar aos meus quadros</a>
+      </div>
+      <div id="board-content">
+        <section class="board-heading" aria-labelledby="page-title">
+          <div>
+            <p class="eyebrow">ESPAÇO DE TRABALHO</p>
+            <h1 id="page-title">Meu quadro</h1>
+            <p class="board-subtitle">Organize suas ideias, uma tarefa de cada vez.</p>
+          </div>
+          <div class="board-summary" aria-label="Resumo do quadro">
+            <span class="summary-dot" aria-hidden="true"></span>
+            <span id="total-count">0 atividades</span>
+          </div>
+        </section>
+
+        <section class="sprint-toolbar" aria-label="Backlog e sprints">
+          <label for="sprint-filter">Backlog / Sprint</label>
+          <select id="sprint-filter"></select>
+          <span id="backlog-summary" class="confirm-message"></span>
+          <button id="create-sprint" class="button button-quiet" type="button">Nova sprint</button>
+        </section>
+
+        <section id="kanban-board" class="kanban-board" aria-label="Colunas do quadro"></section>
+
+        <details class="board-history">
+          <summary>Histórico de atividades</summary>
+          <div id="board-history-list" class="board-history-list"></div>
+        </details>
+
+        <footer class="app-footer">
+          <span>Feito para manter o foco.</span>
+          <span class="save-status" id="save-status" role="status" aria-live="polite">Alterações sincronizadas</span>
+        </footer>
+      </div>
+    </section>
   </main>
 
   <main id="task-page" class="task-page hidden">
     <header class="task-page-header">
-      <a class="brand" href="/" aria-label="Voltar ao quadro">← Voltar ao quadro</a>
+      <a id="task-page-back" class="brand" href="/quadros" aria-label="Voltar ao quadro">← Voltar ao quadro</a>
       <button id="task-page-edit" class="button button-primary hidden" type="button">Editar atividade</button>
     </header>
     <article class="task-detail">
@@ -209,6 +335,29 @@
       </div>
     </article>
   </main>
+
+  <dialog id="profile-invite-dialog" class="dialog dialog-compact">
+    <form id="profile-invite-form" class="dialog-form">
+      <div class="dialog-heading">
+        <div>
+          <p class="eyebrow">COMPARTILHAMENTO</p>
+          <h2>Convidar para um quadro</h2>
+        </div>
+        <button class="icon-button dialog-close" type="button" data-close="profile-invite-dialog" aria-label="Fechar">×</button>
+      </div>
+      <p id="profile-invite-board-name" class="confirm-message"></p>
+      <label class="field-label" for="profile-invite-role">Permissão</label>
+      <select id="profile-invite-role" name="role">
+        <option value="viewer">Leitor — pode visualizar</option>
+        <option value="editor">Editor — pode alterar o quadro</option>
+      </select>
+      <p id="profile-invite-error" class="form-message error" role="alert" aria-live="polite"></p>
+      <div class="dialog-actions">
+        <button class="button button-quiet" type="button" data-close="profile-invite-dialog">Cancelar</button>
+        <button class="button button-primary" type="submit">Enviar convite</button>
+      </div>
+    </form>
+  </dialog>
 
   <dialog id="task-dialog" class="dialog">
     <form id="task-form" class="dialog-form">
@@ -285,7 +434,7 @@
         </div>
         <button class="icon-button dialog-close" type="button" data-close="share-dialog" aria-label="Fechar">×</button>
       </div>
-      <p class="confirm-message">Convide pelo e-mail da conta Fluxo e escolha leitor ou editor. O convite fica pendente até a pessoa entrar com esse e-mail e aceitá-lo no site.</p>
+      <p class="confirm-message">O convite aparecerá na área de convites da pessoa quando ela entrar no Fluxo com este e-mail. Ela precisará aceitá-lo no próprio site.</p>
       <label class="field-label" for="share-email">E-mail do convidado</label>
       <input id="share-email" name="email" type="email" autocomplete="email" placeholder="pessoa@exemplo.com" required>
       <label class="field-label" for="share-role">Permissão</label>
@@ -300,7 +449,7 @@
       </div>
       <div class="dialog-actions">
         <button class="button button-quiet" type="button" data-close="share-dialog">Cancelar</button>
-        <button class="button button-primary" type="submit">Enviar convite</button>
+        <button class="button button-primary" type="submit">Criar convite no site</button>
       </div>
     </form>
   </dialog>

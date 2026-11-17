@@ -38,8 +38,93 @@ service cloud.firestore {
       return /databases/$(database)/documents/kanbans/$(boardId)/invites/$(inviteId);
     }
 
+    function profilePath(userId) {
+      return /databases/$(database)/documents/profiles/$(userId);
+    }
+
+    function friendRequestPath(userId, requestId) {
+      return /databases/$(database)/documents/users/$(userId)/friendRequests/$(requestId);
+    }
+
+    function friendPath(userId, friendId) {
+      return /databases/$(database)/documents/users/$(userId)/friends/$(friendId);
+    }
+
+    function validProfile() {
+      return request.resource.data.keys().hasAll(['displayName', 'bio', 'updatedAt'])
+        && request.resource.data.keys().hasOnly(['displayName', 'bio', 'updatedAt'])
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() > 0
+        && request.resource.data.displayName.size() <= 80
+        && request.resource.data.bio is string
+        && request.resource.data.bio.size() <= 280
+        && request.resource.data.updatedAt is timestamp;
+    }
+
+    match /profiles/{userId} {
+      allow get: if signedIn();
+      allow list: if false;
+      allow create, update: if signedIn()
+        && request.auth.uid == userId
+        && validProfile();
+      allow delete: if signedIn() && request.auth.uid == userId;
+    }
+
     match /users/{userId}/kanban/{document=**} {
       allow read, write: if signedIn() && request.auth.uid == userId;
+    }
+
+    match /users/{userId}/friendRequests/{requestId} {
+      allow read: if signedIn()
+        && (request.auth.uid == userId
+          || request.auth.uid == requestId
+          || resource.data.fromUid == request.auth.uid);
+      allow create: if signedIn()
+        && userId != request.auth.uid
+        && requestId == request.auth.uid
+        && request.resource.data.fromUid == request.auth.uid
+        && request.resource.data.toUid == userId
+        && request.resource.data.status == 'pending'
+        && request.resource.data.createdAt is timestamp
+        && exists(profilePath(userId))
+        && request.resource.data.keys().hasOnly(['fromUid', 'toUid', 'status', 'createdAt']);
+      allow update: if signedIn()
+        && request.auth.uid == userId
+        && resource.data.status == 'pending'
+        && request.resource.data.status == 'accepted'
+        && request.resource.data.updatedAt is timestamp
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])
+        && existsAfter(friendPath(userId, requestId))
+        && existsAfter(friendPath(requestId, userId));
+      allow delete: if signedIn()
+        && (request.auth.uid == userId || request.auth.uid == resource.data.fromUid);
+    }
+
+    match /users/{userId}/friends/{friendId} {
+      allow read: if signedIn() && request.auth.uid == userId;
+      allow create: if signedIn()
+        && request.resource.data.uid == friendId
+        && request.resource.data.requestRecipientUid is string
+        && request.resource.data.requestSenderUid is string
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.keys().hasOnly([
+          'uid', 'createdAt', 'requestRecipientUid', 'requestSenderUid'
+        ])
+        && (
+          (userId == request.auth.uid
+            && request.resource.data.requestRecipientUid == request.auth.uid
+            && request.resource.data.requestSenderUid == friendId
+            && existsAfter(friendRequestPath(userId, friendId))
+            && getAfter(friendRequestPath(userId, friendId)).data.status == 'accepted')
+          || (friendId == request.auth.uid
+            && request.resource.data.requestRecipientUid == request.auth.uid
+            && request.resource.data.requestSenderUid == userId
+            && existsAfter(friendRequestPath(friendId, userId))
+            && getAfter(friendRequestPath(friendId, userId)).data.status == 'accepted')
+        );
+      allow update: if false;
+      allow delete: if signedIn()
+        && (request.auth.uid == userId || request.auth.uid == friendId);
     }
 
     match /kanbans/{boardId} {
@@ -61,8 +146,10 @@ service cloud.firestore {
           && request.resource.data.role in ['editor', 'viewer']
           && request.resource.data.email == request.auth.token.email.lower()
           && exists(invitePath(boardId, request.resource.data.inviteId))
-          && get(invitePath(boardId, request.resource.data.inviteId)).data.invitedEmail
-            == request.auth.token.email.lower()
+          && (get(invitePath(boardId, request.resource.data.inviteId)).data.invitedEmail
+              == request.auth.token.email.lower()
+            || get(invitePath(boardId, request.resource.data.inviteId)).data.invitedUid
+              == request.auth.uid)
           && get(invitePath(boardId, request.resource.data.inviteId)).data.role
             == request.resource.data.role;
         allow update, delete: if isOwner(boardId);
@@ -71,16 +158,27 @@ service cloud.firestore {
       match /invites/{inviteId} {
         allow read: if isOwner(boardId)
           || (signedIn()
-            && resource.data.invitedEmail == request.auth.token.email.lower());
+            && (resource.data.invitedEmail == request.auth.token.email.lower()
+              || resource.data.invitedUid == request.auth.uid));
         allow create: if isOwner(boardId)
           && request.resource.data.ownerId == request.auth.uid
           && request.resource.data.boardId == boardId
-          && request.resource.data.invitedEmail is string
-          && request.resource.data.invitedEmail.size() > 3
-          && request.resource.data.role in ['editor', 'viewer'];
+          && request.resource.data.role in ['editor', 'viewer']
+          && (
+            (request.resource.data.keys().hasAll(['invitedEmail'])
+              && !request.resource.data.keys().hasAny(['invitedUid'])
+              && request.resource.data.invitedEmail is string
+              && request.resource.data.invitedEmail.size() > 3)
+            || (request.resource.data.keys().hasAll(['invitedUid'])
+              && !request.resource.data.keys().hasAny(['invitedEmail'])
+              && request.resource.data.invitedUid is string
+              && request.resource.data.invitedUid.size() > 0
+              && exists(profilePath(request.resource.data.invitedUid)))
+          );
         allow delete: if isOwner(boardId)
           || (signedIn()
-            && resource.data.invitedEmail == request.auth.token.email.lower());
+            && (resource.data.invitedEmail == request.auth.token.email.lower()
+              || resource.data.invitedUid == request.auth.uid));
         allow update: if false;
       }
 
@@ -112,7 +210,14 @@ service cloud.firestore {
 
     match /{path=**}/invites/{inviteId} {
       allow read: if signedIn()
-        && resource.data.invitedEmail == request.auth.token.email.lower();
+        && (resource.data.invitedEmail == request.auth.token.email.lower()
+          || resource.data.invitedUid == request.auth.uid);
+    }
+
+    match /{path=**}/friendRequests/{requestId} {
+      allow read: if signedIn()
+        && (resource.data.fromUid == request.auth.uid
+          || resource.data.toUid == request.auth.uid);
     }
   }
 }

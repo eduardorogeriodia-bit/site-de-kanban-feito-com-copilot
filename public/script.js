@@ -39,6 +39,49 @@ const elements = {
   registerConfirmPassword: document.querySelector('#register-confirm-password'),
   registerError: document.querySelector('#register-error'),
   logoutButton: document.querySelector('#logout-button'),
+  boardTools: document.querySelector('#board-tools'),
+  homePage: document.querySelector('#home-page'),
+  homeUserName: document.querySelector('#home-user-name'),
+  homeBoardCount: document.querySelector('#home-board-count'),
+  colleaguesPage: document.querySelector('#colleagues-page'),
+  colleaguesError: document.querySelector('#colleagues-error'),
+  incomingFriendRequests: document.querySelector('#incoming-friend-requests'),
+  incomingRequestsEmpty: document.querySelector('#incoming-requests-empty'),
+  friendsList: document.querySelector('#friends-list'),
+  friendsEmpty: document.querySelector('#friends-empty'),
+  outgoingFriendRequests: document.querySelector('#outgoing-friend-requests'),
+  outgoingRequestsEmpty: document.querySelector('#outgoing-requests-empty'),
+  boardsPage: document.querySelector('#boards-page'),
+  boardsList: document.querySelector('#boards-list'),
+  boardsEmptyState: document.querySelector('#boards-empty-state'),
+  boardsAddButton: document.querySelector('#boards-add-board'),
+  boardPage: document.querySelector('#board-page'),
+  boardContent: document.querySelector('#board-content'),
+  boardNotFound: document.querySelector('#board-not-found'),
+  profilePage: document.querySelector('#profile-page'),
+  profileForm: document.querySelector('#profile-form'),
+  profileView: document.querySelector('#profile-view'),
+  profileViewName: document.querySelector('#profile-view-name'),
+  profileViewBio: document.querySelector('#profile-view-bio'),
+  profileEditButton: document.querySelector('#profile-edit'),
+  profileCancelButton: document.querySelector('#profile-cancel'),
+  profileDisplayName: document.querySelector('#profile-display-name'),
+  profileBio: document.querySelector('#profile-bio'),
+  profileError: document.querySelector('#profile-error'),
+  profilePublicUrl: document.querySelector('#profile-public-url'),
+  copyProfileLinkButton: document.querySelector('#copy-profile-link'),
+  publicProfilePage: document.querySelector('#public-profile-page'),
+  publicProfileCard: document.querySelector('#public-profile-card'),
+  publicProfileName: document.querySelector('#public-profile-name'),
+  publicProfileBio: document.querySelector('#public-profile-bio'),
+  publicProfileActions: document.querySelector('#public-profile-actions'),
+  publicProfileMessage: document.querySelector('#public-profile-message'),
+  profileInviteDialog: document.querySelector('#profile-invite-dialog'),
+  profileInviteForm: document.querySelector('#profile-invite-form'),
+  profileInviteBoardName: document.querySelector('#profile-invite-board-name'),
+  profileInviteRole: document.querySelector('#profile-invite-role'),
+  profileInviteError: document.querySelector('#profile-invite-error'),
+  taskPageBack: document.querySelector('#task-page-back'),
   boardSelect: document.querySelector('#board-select'),
   shareButton: document.querySelector('#share-board'),
   invitationsPanel: document.querySelector('#invitations-panel'),
@@ -95,6 +138,8 @@ let pendingDelete = null;
 let draggedTaskId = null;
 let toastTimer;
 let authenticatedUser = null;
+let currentProfile = null;
+let profileBeingInvited = null;
 let authGeneration = 0;
 let saveQueue = Promise.resolve();
 const saveVersions = new Map();
@@ -228,12 +273,13 @@ function atualizarPainelDeConvites() {
 
 async function carregarQuadrosEConvitesCompartilhados(user) {
   const db = obterDb();
-  const [memberships, ownedSharedBoards, invitations] = await Promise.all([
+  const [memberships, ownedSharedBoards, emailInvitations, userInvitations] = await Promise.all([
     db.collectionGroup('members').where('uid', '==', user.uid).get(),
     db.collection('kanbans').where('ownerId', '==', user.uid).get(),
     user.email
       ? db.collectionGroup('invites').where('invitedEmail', '==', user.email.trim().toLowerCase()).get()
       : Promise.resolve({ docs: [] }),
+    db.collectionGroup('invites').where('invitedUid', '==', user.uid).get(),
   ]);
   const sharedById = new Map();
   const memberBoards = await Promise.all(memberships.docs.map(async (membership) => {
@@ -254,7 +300,10 @@ async function carregarQuadrosEConvitesCompartilhados(user) {
     const data = snapshot.data();
     sharedById.set(snapshot.id, { ...data, id: snapshot.id, role: 'owner', isShared: true });
   });
-  pendingInvitations = invitations.docs.map((snapshot) => ({
+  const invitationSnapshots = new Map(
+    [...emailInvitations.docs, ...userInvitations.docs].map((snapshot) => [snapshot.ref.path, snapshot]),
+  );
+  pendingInvitations = [...invitationSnapshots.values()].map((snapshot) => ({
     ...snapshot.data(),
     id: snapshot.id,
     boardId: snapshot.ref.parent.parent.id,
@@ -333,6 +382,7 @@ function inicializarAutenticacao() {
 async function sincronizarSessao(user) {
   const generation = ++authGeneration;
   authenticatedUser = user;
+  currentProfile = null;
   state = null;
   pendingLocalState = null;
 
@@ -361,7 +411,7 @@ async function sincronizarSessao(user) {
     if (!loaded) return;
     renderizar();
     exibirPainelAutenticado();
-    await abrirTaskDaUrl();
+    await abrirRotaAutenticada();
   } catch (error) {
     if (generation !== authGeneration) return;
     console.error('Não foi possível carregar os dados do usuário:', error);
@@ -735,6 +785,471 @@ function renderizar() {
   ensureHistorySubscription(board);
 }
 
+function atualizarNavegacaoAtiva(route) {
+  document.querySelectorAll('[data-route-link]').forEach((link) => {
+    const active = link.dataset.routeLink === route;
+    if (active) link.setAttribute('aria-current', 'page');
+    else link.removeAttribute('aria-current');
+  });
+}
+
+function renderizarInicio() {
+  const displayName = currentProfile?.displayName
+    || authenticatedUser.displayName
+    || 'ao Fluxo';
+  elements.homeUserName.textContent = displayName;
+  const ownedCount = state.boards.filter((board) => board.ownerId === authenticatedUser.uid).length;
+  const sharedCount = state.boards.length - ownedCount;
+  elements.homeBoardCount.textContent = `${ownedCount} ${ownedCount === 1 ? 'quadro' : 'quadros'}`
+    + (sharedCount ? ` · ${sharedCount} compartilhado${sharedCount === 1 ? '' : 's'}` : '');
+}
+
+function renderizarListaDeQuadros() {
+  elements.boardsList.replaceChildren();
+  const groups = [
+    ['Meus quadros', state.boards.filter((board) => board.ownerId === authenticatedUser.uid)],
+    ['Compartilhados comigo', state.boards.filter((board) => board.ownerId !== authenticatedUser.uid)],
+  ].filter(([, boards]) => boards.length);
+
+  groups.forEach(([title, boards]) => {
+    const group = criarElemento('section', 'board-list-group');
+    group.append(criarElemento('h2', '', title));
+    const list = criarElemento('div', 'board-list');
+    boards.forEach((board) => {
+      const link = criarElemento('a', 'board-list-card');
+      link.href = `/quadros/${encodeURIComponent(board.id)}`;
+      link.append(
+        criarElemento('span', 'board-list-card-mark', '▦'),
+        criarElemento('span', 'board-list-card-name', board.name),
+        criarElemento(
+          'span',
+          'board-list-card-meta',
+          `${board.tasks.length} ${board.tasks.length === 1 ? 'atividade' : 'atividades'}`
+            + (board.ownerId !== authenticatedUser.uid ? ' · compartilhado' : ''),
+        ),
+      );
+      list.append(link);
+    });
+    group.append(list);
+    elements.boardsList.append(group);
+  });
+
+  const isEmpty = groups.length === 0;
+  elements.boardsEmptyState.classList.toggle('hidden', !isEmpty);
+  elements.boardsList.classList.toggle('hidden', isEmpty);
+}
+
+async function carregarMeuPerfil() {
+  const snapshot = await obterDb().collection('profiles').doc(authenticatedUser.uid).get();
+  currentProfile = snapshot.exists ? snapshot.data() : null;
+  const defaultName = currentProfile?.displayName
+    || authenticatedUser.displayName
+    || '';
+  elements.profileDisplayName.value = defaultName;
+  elements.profileBio.value = currentProfile?.bio || '';
+  elements.profilePublicUrl.value = `${window.location.origin}/perfil/${encodeURIComponent(authenticatedUser.uid)}`;
+  elements.profileViewName.textContent = currentProfile?.displayName || '';
+  elements.profileViewBio.textContent = currentProfile?.bio || 'Você ainda não adicionou uma biografia.';
+  mostrarEditorDePerfil(!currentProfile?.displayName);
+  renderizarInicio();
+}
+
+function mostrarEditorDePerfil(editing) {
+  const hasProfile = Boolean(currentProfile?.displayName);
+  elements.profileForm.classList.toggle('hidden', !editing);
+  elements.profileView.classList.toggle('hidden', editing || !hasProfile);
+  elements.profileCancelButton.classList.toggle('hidden', !editing || !hasProfile);
+  if (editing) elements.profileDisplayName.focus();
+}
+
+function referenciaDeColegas(uid) {
+  return obterDb().collection('users').doc(uid);
+}
+
+async function obterNomeDoPerfil(uid) {
+  const snapshot = await obterDb().collection('profiles').doc(uid).get();
+  return {
+    uid,
+    displayName: snapshot.exists ? snapshot.data().displayName : 'Perfil indisponível',
+  };
+}
+
+function criarCartaoDeColega(profile, actions = []) {
+  const card = criarElemento('article', 'colleague-card');
+  const link = criarElemento('a', 'colleague-name', profile.displayName);
+  link.href = `/perfil/${encodeURIComponent(profile.uid)}`;
+  const actionList = criarElemento('div', 'colleague-actions');
+  actions.forEach((action) => actionList.append(action));
+  card.append(link, actionList);
+  return card;
+}
+
+function criarAcaoDeColega(label, callback, className = 'button button-quiet') {
+  const button = criarElemento('button', className, label);
+  button.type = 'button';
+  button.addEventListener('click', async () => {
+    try {
+      await callback();
+    } catch (error) {
+      console.error(`Não foi possível concluir a ação “${label}”:`, error);
+      mostrarAviso('Não foi possível concluir esta ação. Tente novamente.');
+    }
+  });
+  return button;
+}
+
+async function renderizarColegas() {
+  const userRef = referenciaDeColegas(authenticatedUser.uid);
+  const [friendSnapshots, incomingSnapshots, outgoingSnapshots] = await Promise.all([
+    userRef.collection('friends').get(),
+    userRef.collection('friendRequests').where('status', '==', 'pending').get(),
+    obterDb().collectionGroup('friendRequests').where('fromUid', '==', authenticatedUser.uid).get(),
+  ]);
+  const friends = await Promise.all(friendSnapshots.docs.map(async (snapshot) => ({
+    ...await obterNomeDoPerfil(snapshot.id),
+    friendship: snapshot.data(),
+  })));
+  const incoming = await Promise.all(incomingSnapshots.docs.map(async (snapshot) => ({
+    ...await obterNomeDoPerfil(snapshot.data().fromUid),
+    request: snapshot.data(),
+  })));
+  const outgoing = await Promise.all(outgoingSnapshots.docs
+    .filter((snapshot) => snapshot.data().status === 'pending')
+    .map(async (snapshot) => ({
+      ...await obterNomeDoPerfil(snapshot.data().toUid),
+      request: snapshot.data(),
+    })));
+
+  elements.friendsList.replaceChildren(...friends.map((profile) => (
+    criarCartaoDeColega(profile, [
+      criarAcaoDeColega('Remover', () => removerColega(profile.uid, profile.friendship)),
+    ])
+  )));
+  elements.incomingFriendRequests.replaceChildren(...incoming.map((profile) => (
+    criarCartaoDeColega(profile, [
+      criarAcaoDeColega('Aceitar', () => responderSolicitacaoDeColega(profile.uid, true), 'button button-primary'),
+      criarAcaoDeColega('Recusar', () => responderSolicitacaoDeColega(profile.uid, false)),
+    ])
+  )));
+  elements.outgoingFriendRequests.replaceChildren(...outgoing.map((profile) => (
+    criarCartaoDeColega(profile, [
+      criarAcaoDeColega('Cancelar solicitação', () => cancelarSolicitacaoDeColega(profile.uid)),
+    ])
+  )));
+
+  elements.friendsEmpty.classList.toggle('hidden', friends.length > 0);
+  elements.incomingRequestsEmpty.classList.toggle('hidden', incoming.length > 0);
+  elements.outgoingRequestsEmpty.classList.toggle('hidden', outgoing.length > 0);
+}
+
+async function enviarSolicitacaoDeColega(uid) {
+  if (!uid || uid === authenticatedUser.uid) return;
+  const requestRef = referenciaDeColegas(uid).collection('friendRequests').doc(authenticatedUser.uid);
+  const existing = await requestRef.get();
+  if (existing.exists) {
+    mostrarAviso('Já existe uma solicitação para essa pessoa.');
+    return;
+  }
+  await requestRef.set({
+    fromUid: authenticatedUser.uid,
+    toUid: uid,
+    status: 'pending',
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+  });
+  mostrarAviso('Solicitação de colega enviada.');
+  await renderizarAcoesDoPerfil(uid);
+}
+
+async function responderSolicitacaoDeColega(senderUid, accept) {
+  const requestRef = referenciaDeColegas(authenticatedUser.uid)
+    .collection('friendRequests').doc(senderUid);
+  const requestSnapshot = await requestRef.get();
+  if (!requestSnapshot.exists || requestSnapshot.data().status !== 'pending') {
+    await renderizarColegas();
+    return;
+  }
+  if (!accept) {
+    await requestRef.delete();
+    mostrarAviso('Solicitação recusada.');
+    await renderizarColegas();
+    await renderizarAcoesDoPerfil(senderUid);
+    return;
+  }
+
+  const batch = obterDb().batch();
+  const timestamp = firebase.firestore.FieldValue.serverTimestamp();
+  const friendship = {
+    createdAt: timestamp,
+    requestRecipientUid: authenticatedUser.uid,
+    requestSenderUid: senderUid,
+  };
+  batch.update(requestRef, {
+    status: 'accepted',
+    updatedAt: timestamp,
+  });
+  batch.set(referenciaDeColegas(authenticatedUser.uid).collection('friends').doc(senderUid), {
+    ...friendship,
+    uid: senderUid,
+  });
+  batch.set(referenciaDeColegas(senderUid).collection('friends').doc(authenticatedUser.uid), {
+    ...friendship,
+    uid: authenticatedUser.uid,
+  });
+
+  const reverseRequest = referenciaDeColegas(senderUid)
+    .collection('friendRequests').doc(authenticatedUser.uid);
+  const reverseSnapshot = await reverseRequest.get();
+  if (reverseSnapshot.exists && reverseSnapshot.data().status === 'pending') batch.delete(reverseRequest);
+  await batch.commit();
+  mostrarAviso('Vocês agora são colegas.');
+  await renderizarColegas();
+  await renderizarAcoesDoPerfil(senderUid);
+}
+
+async function cancelarSolicitacaoDeColega(targetUid) {
+  await referenciaDeColegas(targetUid).collection('friendRequests').doc(authenticatedUser.uid).delete();
+  mostrarAviso('Solicitação cancelada.');
+  await renderizarColegas();
+  await renderizarAcoesDoPerfil(targetUid);
+}
+
+async function removerColega(friendUid, friendship) {
+  const batch = obterDb().batch();
+  batch.delete(referenciaDeColegas(authenticatedUser.uid).collection('friends').doc(friendUid));
+  batch.delete(referenciaDeColegas(friendUid).collection('friends').doc(authenticatedUser.uid));
+  if (friendship?.requestRecipientUid && friendship?.requestSenderUid) {
+    batch.delete(referenciaDeColegas(friendship.requestRecipientUid)
+      .collection('friendRequests').doc(friendship.requestSenderUid));
+  }
+  await batch.commit();
+  mostrarAviso('Colega removido.');
+  await renderizarColegas();
+  await renderizarAcoesDoPerfil(friendUid);
+}
+
+function obterQuadroDoConviteDePerfil() {
+  const requestedBoardId = new URLSearchParams(window.location.search).get('board');
+  if (requestedBoardId) return state.boards.find((board) => board.id === requestedBoardId) ?? null;
+  return obterQuadroAtual();
+}
+
+async function abrirDialogoDeConviteDoPerfil(uid, board) {
+  profileBeingInvited = uid;
+  elements.profileInviteError.textContent = '';
+  elements.profileInviteForm.reset();
+  elements.profileInviteBoardName.textContent = `O convite será enviado para “${board.name}”.`;
+  elements.profileInviteDialog.showModal();
+}
+
+async function enviarConviteDoPerfil(event) {
+  event.preventDefault();
+  const board = obterQuadroDoConviteDePerfil();
+  const uid = profileBeingInvited;
+  if (!board || papelDoQuadro(board) !== 'owner' || !uid || uid === authenticatedUser.uid) {
+    elements.profileInviteError.textContent = 'Este quadro não está disponível para convite.';
+    return;
+  }
+  const button = elements.profileInviteForm.querySelector('[type="submit"]');
+  button.disabled = true;
+  elements.profileInviteError.textContent = '';
+  try {
+    const ref = obterReferenciaDoQuadro(board.id);
+    const { role, isShared, ...boardData } = board;
+    await ref.set({ ...boardData, ownerId: authenticatedUser.uid, isShared: true }, { merge: true });
+    board.isShared = true;
+    const memberRef = ref.collection('members').doc(uid);
+    const existingInvite = await ref.collection('invites').where('invitedUid', '==', uid).get();
+    if ((await memberRef.get()).exists) {
+      elements.profileInviteError.textContent = 'Essa pessoa já tem acesso ao quadro.';
+      return;
+    }
+    if (!existingInvite.empty) {
+      elements.profileInviteError.textContent = 'Já existe um convite pendente para essa pessoa.';
+      return;
+    }
+    await ref.collection('invites').doc(criarId()).set({
+      boardId: board.id,
+      boardName: board.name,
+      ownerId: authenticatedUser.uid,
+      invitedUid: uid,
+      role: elements.profileInviteRole.value,
+      createdAt: Date.now(),
+    });
+    elements.profileInviteDialog.close();
+    mostrarAviso('Convite do quadro enviado ao perfil.');
+    void salvarEstado();
+  } catch (error) {
+    console.error('Não foi possível convidar o colega para o quadro:', error);
+    elements.profileInviteError.textContent = error?.code === 'permission-denied'
+      ? 'O Firebase bloqueou o convite. Atualize as regras do Firestore.'
+      : 'Não foi possível enviar o convite. Verifique sua conexão e tente novamente.';
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function renderizarAcoesDoPerfil(uid) {
+  elements.publicProfileActions.replaceChildren();
+  if (uid === authenticatedUser.uid) return;
+
+  const userRef = referenciaDeColegas(authenticatedUser.uid);
+  const [friend, incoming, outgoing] = await Promise.all([
+    userRef.collection('friends').doc(uid).get(),
+    userRef.collection('friendRequests').doc(uid).get(),
+    referenciaDeColegas(uid).collection('friendRequests').doc(authenticatedUser.uid).get(),
+  ]);
+  const actions = criarElemento('div', 'profile-action-row');
+  if (friend.exists) {
+    actions.append(criarAcaoDeColega('Remover colega', () => removerColega(uid, friend.data())));
+  } else if (incoming.exists && incoming.data().status === 'pending') {
+    actions.append(
+      criarAcaoDeColega('Aceitar solicitação', () => responderSolicitacaoDeColega(uid, true), 'button button-primary'),
+      criarAcaoDeColega('Recusar', () => responderSolicitacaoDeColega(uid, false)),
+    );
+  } else if (outgoing.exists && outgoing.data().status === 'pending') {
+    actions.append(criarElemento('span', 'confirm-message', 'Solicitação enviada'));
+    actions.append(criarAcaoDeColega('Cancelar', () => cancelarSolicitacaoDeColega(uid)));
+  } else {
+    actions.append(criarAcaoDeColega(
+      'Adicionar aos colegas',
+      async () => {
+        try {
+          await enviarSolicitacaoDeColega(uid);
+        } catch (error) {
+          console.error('Não foi possível enviar a solicitação de colega:', error);
+          mostrarAviso('Não foi possível enviar a solicitação. Tente novamente.');
+        }
+      },
+      'button button-primary',
+    ));
+  }
+
+  const board = obterQuadroDoConviteDePerfil();
+  if (board && board.ownerId === authenticatedUser.uid) {
+    actions.append(criarAcaoDeColega(
+      `Convidar para “${board.name}”`,
+      () => abrirDialogoDeConviteDoPerfil(uid, board),
+    ));
+  }
+  elements.publicProfileActions.append(actions);
+}
+
+async function abrirRotaAutenticada() {
+  const path = window.location.pathname.replace(/\/+$/, '') || '/home';
+  const taskRoute = /^\/tasks\/[^/]+$/.test(path);
+  const boardRoute = path.match(/^\/quadros\/([^/]+)$/);
+  const profileRoute = path.match(/^\/perfil\/([^/]+)$/);
+
+  elements.homePage.classList.add('hidden');
+  elements.colleaguesPage.classList.add('hidden');
+  elements.boardsPage.classList.add('hidden');
+  elements.profilePage.classList.add('hidden');
+  elements.publicProfilePage.classList.add('hidden');
+  elements.boardPage.classList.add('hidden');
+  elements.taskPage.classList.add('hidden');
+  elements.boardTools.classList.toggle('hidden', !boardRoute);
+  elements.boardContent.classList.remove('hidden');
+  elements.boardNotFound.classList.add('hidden');
+
+  if (taskRoute) {
+    elements.appShell.classList.add('hidden');
+    elements.taskPage.classList.remove('hidden');
+    atualizarNavegacaoAtiva('');
+    await abrirTaskDaUrl();
+    return;
+  }
+
+  elements.appShell.classList.remove('hidden');
+  if (path === '/' || path === '/home') {
+    atualizarNavegacaoAtiva('home');
+    try {
+      await carregarMeuPerfil();
+      elements.homePage.classList.remove('hidden');
+    } catch (error) {
+      console.error('Não foi possível carregar o perfil:', error);
+      elements.homeUserName.textContent = authenticatedUser.displayName || 'ao Fluxo';
+      elements.homePage.classList.remove('hidden');
+    }
+    return;
+  }
+
+  if (path === '/quadros') {
+    atualizarNavegacaoAtiva('boards');
+    renderizarListaDeQuadros();
+    elements.boardsPage.classList.remove('hidden');
+    return;
+  }
+
+  if (path === '/colegas') {
+    atualizarNavegacaoAtiva('colleagues');
+    elements.colleaguesError.textContent = '';
+    elements.colleaguesPage.classList.remove('hidden');
+    try {
+      await renderizarColegas();
+    } catch (error) {
+      console.error('Não foi possível carregar colegas:', error);
+      elements.colleaguesError.textContent = 'Não foi possível carregar seus colegas. Verifique as regras e tente novamente.';
+    }
+    return;
+  }
+
+  if (boardRoute) {
+    const board = state.boards.find((item) => item.id === boardRoute[1]);
+    atualizarNavegacaoAtiva('boards');
+    elements.boardPage.classList.remove('hidden');
+    if (!board) {
+      elements.boardContent.classList.add('hidden');
+      elements.boardNotFound.classList.remove('hidden');
+      return;
+    }
+    state.activeBoardId = board.id;
+    renderizar();
+    return;
+  }
+
+  if (path === '/perfil') {
+    atualizarNavegacaoAtiva('profile');
+    elements.profileError.textContent = '';
+    try {
+      await carregarMeuPerfil();
+      elements.profilePage.classList.remove('hidden');
+    } catch (error) {
+      console.error('Não foi possível carregar seu perfil:', error);
+      elements.profileError.textContent = 'Não foi possível carregar seu perfil. Verifique sua conexão e tente novamente.';
+      elements.profilePage.classList.remove('hidden');
+    }
+    return;
+  }
+
+  if (profileRoute) {
+    atualizarNavegacaoAtiva('profile');
+    elements.publicProfileCard.classList.add('hidden');
+    elements.publicProfileActions.replaceChildren();
+    elements.publicProfileMessage.textContent = 'Carregando perfil...';
+    elements.publicProfilePage.classList.remove('hidden');
+    try {
+      const snapshot = await obterDb().collection('profiles').doc(profileRoute[1]).get();
+      if (!snapshot.exists) {
+        elements.publicProfileMessage.textContent = 'Perfil não encontrado ou ainda não publicado.';
+        return;
+      }
+      const profile = snapshot.data();
+      elements.publicProfileName.textContent = profile.displayName;
+      elements.publicProfileBio.textContent = profile.bio || 'Esta pessoa ainda não adicionou uma biografia.';
+      elements.publicProfileCard.classList.remove('hidden');
+      elements.publicProfileMessage.textContent = '';
+      await renderizarAcoesDoPerfil(profileRoute[1]);
+    } catch (error) {
+      console.error('Não foi possível abrir este perfil:', error);
+      elements.publicProfileMessage.textContent = 'Não foi possível abrir este perfil. Verifique sua conexão e tente novamente.';
+    }
+    return;
+  }
+
+  atualizarNavegacaoAtiva('');
+  elements.homePage.classList.remove('hidden');
+}
+
 function atualizarSeletorDeSprints(board) {
   const sprints = Array.isArray(board.sprints) ? board.sprints : [];
   const options = [new Option('Backlog', '')];
@@ -943,6 +1458,9 @@ async function abrirTaskDaUrl() {
   }
   activeTaskId = decodeURIComponent(match[1]);
   activeTaskBoardId = new URLSearchParams(window.location.search).get('board');
+  elements.taskPageBack.href = activeTaskBoardId
+    ? `/quadros/${encodeURIComponent(activeTaskBoardId)}`
+    : '/quadros';
   const found = localizarTask(activeTaskId, activeTaskBoardId);
   if (!found) {
     elements.taskPage.classList.remove('hidden');
@@ -951,6 +1469,7 @@ async function abrirTaskDaUrl() {
     return;
   }
   activeTaskBoardId = found.board.id;
+  elements.taskPageBack.href = `/quadros/${encodeURIComponent(found.board.id)}`;
   state.activeBoardId = found.board.id;
   if (!found.board.isShared && papelDoQuadro(found.board) === 'owner') {
     try {
@@ -1036,18 +1555,15 @@ async function abrirCompartilhamentoDoQuadro() {
   }
 }
 
-function criarLinhaDeAcesso(label, role, onRemove, onResend) {
+function criarLinhaDeAcesso(label, role, onRemove, profileUid, profileBoardId) {
   const row = criarElemento('div', 'member-row');
-  row.append(
-    criarElemento('span', 'member-email', label),
-    criarElemento('span', 'member-role', role),
-  );
-  if (onResend) {
-    const resend = criarElemento('button', 'button button-quiet', 'Reenviar e-mail');
-    resend.type = 'button';
-    resend.addEventListener('click', () => void onResend());
-    row.append(resend);
+  row.append(criarElemento('span', 'member-email', label));
+  if (profileUid) {
+    const profileLink = criarElemento('a', 'member-profile-link', 'Ver perfil');
+    profileLink.href = `/perfil/${encodeURIComponent(profileUid)}?board=${encodeURIComponent(profileBoardId)}`;
+    row.append(profileLink);
   }
+  row.append(criarElemento('span', 'member-role', role));
   if (onRemove) {
     const remove = criarElemento('button', 'button button-quiet', 'Remover');
     remove.type = 'button';
@@ -1055,65 +1571,6 @@ function criarLinhaDeAcesso(label, role, onRemove, onResend) {
     row.append(remove);
   }
   elements.boardMembers.append(row);
-}
-
-async function enviarEmailDoConvite(boardId, inviteId, force = false) {
-  const endpoint = String(window.inviteEmailEndpoint || '').trim();
-  if (!endpoint) return 'not-configured';
-  if (!authenticatedUser) throw new Error('AUTHENTICATION_REQUIRED');
-
-  const requestId = criarId();
-  const idToken = await authenticatedUser.getIdToken();
-  let dispatchError = null;
-  try {
-    await fetch(endpoint, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'text/plain;charset=UTF-8' },
-      body: JSON.stringify({ idToken, boardId, inviteId, requestId, force }),
-    });
-  } catch (error) {
-    dispatchError = error;
-  }
-
-  const statusRef = obterDb()
-    .collection('users')
-    .doc(authenticatedUser.uid)
-    .collection('kanban')
-    .doc(`inviteEmail_${inviteId}`);
-
-  for (let attempt = 0; attempt < 20; attempt += 1) {
-    const snapshot = await statusRef.get();
-    if (snapshot.exists) {
-      const { status, requestId: completedRequestId } = snapshot.data();
-      if (completedRequestId !== requestId) {
-        await new Promise((resolve) => window.setTimeout(resolve, 500));
-        continue;
-      }
-      if (status === 'sent') return 'sent';
-      if (status === 'failed') throw new Error('EMAIL_SEND_FAILED');
-    }
-    await new Promise((resolve) => window.setTimeout(resolve, 500));
-  }
-  if (dispatchError) throw dispatchError;
-  return 'pending';
-}
-
-async function reenviarEmailDoConvite(board, invite) {
-  elements.shareError.textContent = '';
-  try {
-    const result = await enviarEmailDoConvite(board.id, invite.id, true);
-    if (result === 'not-configured') {
-      elements.shareError.textContent = 'Configure a URL do Apps Script em public/firebase-config.js para enviar e-mails.';
-    } else if (result === 'sent') {
-      mostrarAviso(`E-mail do convite enviado para ${invite.invitedEmail}.`);
-    } else {
-      elements.shareError.textContent = 'O convite continua pendente, mas não foi possível confirmar o envio. Tente novamente.';
-    }
-  } catch (error) {
-    console.error('Não foi possível reenviar o e-mail do convite:', error);
-    elements.shareError.textContent = 'O convite continua pendente, mas o e-mail não foi enviado. Confira a implantação e a cota do Apps Script.';
-  }
 }
 
 async function carregarAcessosDoQuadro(board) {
@@ -1130,7 +1587,7 @@ async function carregarAcessosDoQuadro(board) {
     boardInvitations = [];
   }
   elements.boardMembers.replaceChildren();
-  criarLinhaDeAcesso(authenticatedUser.email || 'Você', 'Dono', null);
+  criarLinhaDeAcesso(authenticatedUser.email || 'Você', 'Dono', null, authenticatedUser.uid, board.id);
   boardMembers.forEach((member) => {
     criarLinhaDeAcesso(
       member.email,
@@ -1140,18 +1597,19 @@ async function carregarAcessosDoQuadro(board) {
         await carregarAcessosDoQuadro(board);
         mostrarAviso('Acesso removido.');
       },
+      member.uid,
+      board.id,
     );
   });
   boardInvitations.forEach((invite) => {
     criarLinhaDeAcesso(
-      `${invite.invitedEmail} (convite pendente)`,
-      invite.role === 'editor' ? 'Editor' : 'Leitor',
+      invite.invitedEmail || 'Colega por perfil',
+      `${invite.role === 'editor' ? 'Editor' : 'Leitor'} · aguardando aceitação`,
       async () => {
         await ref.collection('invites').doc(invite.id).delete();
         await carregarAcessosDoQuadro(board);
         mostrarAviso('Convite cancelado.');
       },
-      async () => reenviarEmailDoConvite(board, invite),
     );
   });
 }
@@ -1222,19 +1680,7 @@ async function convidarParaQuadro(event) {
     });
     await carregarAcessosDoQuadro(board);
     elements.shareEmail.value = '';
-    try {
-      const emailStatus = await enviarEmailDoConvite(board.id, inviteId);
-      if (emailStatus === 'sent') {
-        mostrarAviso(`Convite enviado por e-mail para ${email}. A pessoa precisa aceitá-lo no site.`);
-      } else if (emailStatus === 'not-configured') {
-        elements.shareError.textContent = 'Convite criado no site, mas o e-mail ainda não está configurado. Configure a URL do Apps Script em public/firebase-config.js.';
-      } else {
-        elements.shareError.textContent = 'Convite criado no site, mas não foi possível confirmar o envio. Use “Reenviar e-mail” na lista de acessos.';
-      }
-    } catch (error) {
-      console.error('O convite foi criado, mas não foi possível enviar o e-mail:', error);
-      elements.shareError.textContent = 'Convite criado no site, mas o e-mail não foi enviado. Confira a implantação e a cota do Apps Script.';
-    }
+    mostrarAviso(`Convite criado para ${email}. Ele aparecerá no Fluxo quando a pessoa entrar com essa conta.`);
     void salvarEstado();
   } catch (error) {
     console.error('Não foi possível compartilhar o quadro:', error);
@@ -1588,6 +2034,66 @@ elements.retryLoadButton.addEventListener('click', () => {
   if (auth?.currentUser) void sincronizarSessao(auth.currentUser);
 });
 
+elements.profileForm.addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const displayName = elements.profileDisplayName.value.trim();
+  const bio = elements.profileBio.value.trim();
+  if (!displayName) {
+    elements.profileError.textContent = 'Informe um nome de exibição.';
+    elements.profileDisplayName.focus();
+    return;
+  }
+
+  const button = elements.profileForm.querySelector('[type="submit"]');
+  button.disabled = true;
+  elements.profileError.textContent = '';
+  try {
+    await obterDb().collection('profiles').doc(authenticatedUser.uid).set({
+      displayName,
+      bio,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+    currentProfile = { displayName, bio };
+    elements.profileViewName.textContent = displayName;
+    elements.profileViewBio.textContent = bio || 'Você ainda não adicionou uma biografia.';
+    mostrarEditorDePerfil(false);
+    renderizarInicio();
+    mostrarAviso('Perfil atualizado.');
+  } catch (error) {
+    console.error('Não foi possível salvar o perfil:', error);
+    elements.profileError.textContent = error?.code === 'permission-denied'
+      ? 'O Firebase bloqueou a gravação do perfil. Atualize as regras do Firestore.'
+      : 'Não foi possível salvar o perfil. Verifique sua conexão e tente novamente.';
+  } finally {
+    button.disabled = false;
+  }
+});
+
+elements.copyProfileLinkButton.addEventListener('click', async () => {
+  elements.profilePublicUrl.select();
+  if (!navigator.clipboard?.writeText) {
+    mostrarAviso('Link selecionado. Copie o endereço para compartilhar.');
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(elements.profilePublicUrl.value);
+    mostrarAviso('Link do perfil copiado.');
+  } catch (error) {
+    console.error('Não foi possível copiar o link do perfil:', error);
+    mostrarAviso('Não foi possível copiar automaticamente. Copie o endereço selecionado.');
+  }
+});
+
+elements.boardsAddButton.addEventListener('click', () => abrirFormularioDeQuadro());
+elements.profileEditButton.addEventListener('click', () => mostrarEditorDePerfil(true));
+elements.profileCancelButton.addEventListener('click', () => {
+  elements.profileDisplayName.value = currentProfile?.displayName || '';
+  elements.profileBio.value = currentProfile?.bio || '';
+  elements.profileError.textContent = '';
+  mostrarEditorDePerfil(false);
+});
+elements.profileInviteForm.addEventListener('submit', (event) => void enviarConviteDoPerfil(event));
+
 elements.board.addEventListener('click', (event) => {
   if (!podeEditarQuadro()) return;
   const addButton = event.target.closest('[data-add-to]');
@@ -1706,6 +2212,7 @@ elements.boardForm.addEventListener('submit', (event) => {
   if (!name) return;
 
   let activityMessage;
+  let createdBoard = null;
   if (boardBeingEdited) {
     if (papelDoQuadro(obterQuadroAtual()) !== 'owner') return;
     obterQuadroAtual().name = name;
@@ -1717,11 +2224,16 @@ elements.boardForm.addEventListener('submit', (event) => {
     board.role = 'owner';
     state.boards.push(board);
     state.activeBoardId = board.id;
+    createdBoard = board;
     activityMessage = `Criou o quadro “${name}”`;
   }
   elements.boardDialog.close();
   void salvarEstado(activityMessage);
   renderizar();
+  if (createdBoard) {
+    window.history.pushState(null, '', `/quadros/${encodeURIComponent(createdBoard.id)}`);
+    void abrirRotaAutenticada();
+  }
 });
 
 elements.confirmForm.addEventListener('submit', async (event) => {
@@ -1760,6 +2272,8 @@ elements.boardSelect.addEventListener('change', () => {
   state.activeBoardId = elements.boardSelect.value;
   salvarEstado();
   renderizar();
+  window.history.pushState(null, '', `/quadros/${encodeURIComponent(state.activeBoardId)}`);
+  void abrirRotaAutenticada();
 });
 
 elements.sprintFilter.addEventListener('change', () => {
@@ -1866,6 +2380,10 @@ document.querySelectorAll('dialog').forEach((dialog) => {
   dialog.addEventListener('click', (event) => {
     if (event.target === dialog) dialog.close();
   });
+});
+
+window.addEventListener('popstate', () => {
+  if (authenticatedUser && state) void abrirRotaAutenticada();
 });
 
 elements.taskPageEdit.addEventListener('click', () => {

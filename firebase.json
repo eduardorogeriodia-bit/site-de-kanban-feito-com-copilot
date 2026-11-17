@@ -7,6 +7,30 @@
     "public": "public",
     "rewrites": [
       {
+        "source": "/home",
+        "destination": "/index.html"
+      },
+      {
+        "source": "/perfil",
+        "destination": "/index.html"
+      },
+      {
+        "source": "/perfil/**",
+        "destination": "/index.html"
+      },
+      {
+        "source": "/quadros",
+        "destination": "/index.html"
+      },
+      {
+        "source": "/quadros/**",
+        "destination": "/index.html"
+      },
+      {
+        "source": "/colegas",
+        "destination": "/index.html"
+      },
+      {
         "source": "/tasks/**",
         "destination": "/index.html"
       }
